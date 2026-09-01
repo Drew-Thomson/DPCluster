@@ -25,7 +25,7 @@ class Densitycluster:
         t2 = time.time()
         print(f"distance matrix built in {t2 - t1:.4f} seconds")
 
-    def assign_rho_delta(self, cutoff_dist, delta_cut=0.1, rho_cut=0.1, grad=-0.1, kernel='gaussian'):
+    def assign_rho_delta(self, cutoff_dist, delta_cut=0.1, rho_cut=0.1, grad=0.0, kernel='gaussian'):
         t1 = time.time()
         self.grad = grad
         self.cut_dist = cutoff_dist
