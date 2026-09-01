@@ -1,0 +1,15 @@
+[project]
+name = "dpcluster"
+version = "0.1.0"
+description = "Density Peak Clustering implementation"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "matplotlib",
+]
+requires-python = ">=3.9"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
