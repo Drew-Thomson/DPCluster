@@ -4,3 +4,4 @@ __pycache__/
 .eggs/
 *.egg-info/
 .pytest_cache/
+DPC_example_27July2022.ipynb
