@@ -1,105 +1,155 @@
-import time
+"""Fast, vectorized implementation of Density Peak Clustering (Rodriguez & Laio, 2014)
+compatible with scikit-learn conventions.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Literal, Optional, Tuple
 import numpy as np
-import scipy.spatial.distance
+from scipy.spatial.distance import pdist, squareform
+from sklearn.base import BaseEstimator, ClusterMixin
+from sklearn.utils.validation import check_array, check_is_fitted
 
-class Densitycluster:
-    def __init__(self, data):
-        self.data = np.array(data)
-        self.idx_list = list(range(len(self.data)))
-        self.distances = None
-        self.rho = None
-        self.delta = None
-        self.cluster_centre_idx = None
-        self.clusters = None
-        self.grad = None
-        self.delta_cutoff = None
-        self.rho_cutoff = None
-        self.cut_dist = None
+logger = logging.getLogger(__name__)
 
-    def _dens(self, dist, cutoff_dist):
-        return np.exp(-(dist / cutoff_dist))
 
-    def build_dist_matrix(self, method='euclidean'):
-        t1 = time.time()
-        self.distances = scipy.spatial.distance.squareform(scipy.spatial.distance.pdist(self.data, metric=method))
-        t2 = time.time()
-        print(f"distance matrix built in {t2 - t1:.4f} seconds")
+class DensityPeakClustering(BaseEstimator, ClusterMixin):
+    """Clustering by fast search and find of density peaks.
 
-    def assign_rho_delta(self, cutoff_dist, delta_cut=0.1, rho_cut=0.1, grad=0.0, kernel='gaussian'):
-        t1 = time.time()
+    Parameters
+    ----------
+    cutoff_dist : float, default=None
+        Cutoff distance (d_c) for kernel density estimation. 
+        If None, automatically estimated as the 2nd percentile of pairwise distances.
+    delta_cut : float, default=0.1
+        Fractional threshold for minimum distance delta to select cluster peaks.
+    rho_cut : float, default=0.1
+        Fractional threshold for local density rho to select cluster peaks.
+    grad : float, default=0.0
+        Slope of the decision line separating cluster centers.
+    metric : str, default='euclidean'
+        Metric supported by `scipy.spatial.distance.pdist`.
+    kernel : {'gaussian', 'cutoff'}, default='gaussian'
+        Kernel type used for local density calculation.
+    """
+
+    def __init__(
+        self,
+        cutoff_dist: Optional[float] = None,
+        delta_cut: float = 0.1,
+        rho_cut: float = 0.1,
+        grad: float = 0.0,
+        metric: str = "euclidean",
+        kernel: Literal["gaussian", "cutoff"] = "gaussian",
+    ) -> None:
+        self.cutoff_dist = cutoff_dist
+        self.delta_cut = delta_cut
+        self.rho_cut = rho_cut
         self.grad = grad
-        self.cut_dist = cutoff_dist
-        
-        if kernel == 'cutoff':
-            self.rho = [sum([i < cutoff_dist for i in j]) for j in self.distances]
-        elif kernel == 'gaussian':
-            self.rho = []
-            for i in range(len(self.data)):
-                self.rho.append(sum([self._dens(d, cutoff_dist) for d in self.distances[i]]))
+        self.metric = metric
+        self.kernel = kernel
 
-        self.delta = []
-        for i in range(len(self.data)):
-            # Find distances to points with higher density
-            higher_rho_dist = [d for d, r in zip(self.distances[i], self.rho) if r > self.rho[i]]
-            if higher_rho_dist:
-                self.delta.append(min(higher_rho_dist))
-            else:
-                self.delta.append(max(self.distances[i]))
-        
-        self.delta_cutoff = max(self.delta) * delta_cut
-        self.rho_cutoff = max(self.rho) * rho_cut
-        
-        t2 = time.time()
-        print(f"delta and rho assigned in {t2 - t1:.4f} seconds")
+    def _compute_density(self, distances: np.ndarray, cutoff_dist: float) -> np.ndarray:
+        """Vectorized computation of local density rho."""
+        if self.kernel == "cutoff":
+            return np.sum(distances < cutoff_dist, axis=1) - 1.0  # Exclude self
+        elif self.kernel == "gaussian":
+            # Continuous Gaussian kernel
+            return np.sum(np.exp(-((distances / cutoff_dist) ** 2)), axis=1)
+        raise ValueError(f"Unknown kernel: {self.kernel}")
 
-    def cutoff(self, xval):
-        return self.grad * max(self.delta) * xval / max(self.rho) + self.delta_cutoff
+    def _compute_delta(self, distances: np.ndarray, rho: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Vectorized computation of delta and nearest higher density neighbors."""
+        n_samples = distances.shape[0]
+        delta = np.zeros(n_samples, dtype=np.float64)
+        nearest_higher_indices = np.full(n_samples, -1, dtype=int)
 
-    def run_clustering(self):
-        t2 = time.time()
+        # Order points by density descending
+        ord_rho = np.argsort(-rho)
 
-        rho_delta_array = np.array([self.rho, self.delta]).T
-        
-        # Mask 1: Points above the cutoff line (decision graph)
-        mask1 = np.array([i[1] > self.cutoff(i[0]) for i in rho_delta_array])
-        # Mask 2: Points with rho above rho_cutoff
-        mask2 = np.array([i > self.rho_cutoff for i in self.rho])
-        
-        mask3 = np.logical_and(mask1, mask2)
-        self.cluster_centre_idx = np.array(self.idx_list)[mask3]
-        
-        unclustered = np.array(self.idx_list)[np.logical_and(mask2, np.logical_not(mask1))]
-        self.excluded = np.array(self.idx_list)[np.logical_and(np.logical_not(mask2), np.array([i > self.delta_cutoff for i in self.delta]))]
-        
-        print(f"there were {len(unclustered)} points to cluster")
-        print(f"there were {len(self.excluded)} points excluded")
+        # Point with maximum density has delta = max distance to any other point
+        max_idx = ord_rho[0]
+        delta[max_idx] = np.max(distances[max_idx])
+        nearest_higher_indices[max_idx] = -1
 
-        self.pairs = []
-        for unc in unclustered:
-            # Find neighbour with higher density, sorted by distance
-            # Get indices sorted by distance
-            neighbours = np.argsort(self.distances[unc])
-            hd_neighbours = [x for x in neighbours if self.rho[x] > self.rho[unc]]
-            if hd_neighbours:
-                self.pairs.append((unc, hd_neighbours[0]))
-            else:
-                # Should not happen for non-cluster-center points if density is defined
-                pass
+        # Vectorized lookup for remaining points
+        for i in range(1, n_samples):
+            curr_pt = ord_rho[i]
+            higher_pts = ord_rho[:i]
+            
+            # Distances to all points with higher density
+            dists_to_higher = distances[curr_pt, higher_pts]
+            
+            min_dist_idx = np.argmin(dists_to_higher)
+            delta[curr_pt] = dists_to_higher[min_dist_idx]
+            nearest_higher_indices[curr_pt] = higher_pts[min_dist_idx]
 
-        self.clusters = [[x] for x in self.cluster_centre_idx]
+        return delta, nearest_higher_indices
+
+    def fit(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> DensityPeakClustering:
+        """Fit the clustering model to input coordinates or precomputed distances."""
+        # 1. Validation and Setup
+        X = check_array(X, accept_sparse=False, dtype=np.float64)
         
-        count = 0
-        while count < len(self.pairs):
-            for i, pair in enumerate(self.pairs):
-                if pair[0] is None: continue
-                for j, cluster in enumerate(self.clusters):
-                    if pair[1] in cluster:
-                        self.clusters[j].append(pair[0])
-                        count += 1
-                        self.pairs[i] = (None, None)
-                        break
+        n_samples = X.shape[0]
+        if n_samples < 2:
+            raise ValueError("Clustering requires at least 2 data points.")
 
-        t3 = time.time()
-        print(f"clusters assigned in {t3 - t2:.4f} seconds")
-        print(f"found {len(self.clusters)} clusters")
-        print(f"clusters contain {[len(x) for x in self.clusters]} entries")
+        # 2. Pairwise Distances
+        if self.metric == "precomputed":
+            self.distances_ = X
+        else:
+            self.distances_ = squareform(pdist(X, metric=self.metric))
+
+        # Determine cutoff distance if not provided
+        if self.cutoff_dist is None:
+            self.cutoff_dist_ = np.percentile(self.distances_[self.distances_ > 0], 2)
+            logger.info("Auto-estimated cutoff_dist: %f", self.cutoff_dist_)
+        else:
+            self.cutoff_dist_ = self.cutoff_dist
+
+        # 3. Vectorized Rho & Delta
+        self.rho_ = self._compute_density(self.distances_, self.cutoff_dist_)
+        self.delta_, self.nearest_higher_indices_ = self._compute_delta(self.distances_, self.rho_)
+
+        # 4. Peak Identification (Decision Line)
+        max_rho = np.max(self.rho_)
+        max_delta = np.max(self.delta_)
+
+        rho_threshold = max_rho * self.rho_cut
+        delta_threshold = max_delta * self.delta_cut
+
+        # Linear decision boundary: delta > (grad * (max_delta / max_rho) * rho + delta_cutoff)
+        cutoff_line = (self.grad * (max_delta / max_rho) * self.rho_) + delta_threshold
+        is_center = (self.delta_ > cutoff_line) & (self.rho_ > rho_threshold)
+        self.cluster_centers_indices_ = np.flatnonzero(is_center)
+
+        n_clusters = len(self.cluster_centers_indices_)
+        logger.info("Found %d cluster centers.", n_clusters)
+
+        self.labels_ = np.full(n_samples, -1, dtype=int)
+
+        if n_clusters == 0:
+            logger.warning("No cluster centers met the cutoff criteria. All points marked as noise.")
+            return self
+
+        # 5. Assignment via Fast O(N) Lookup
+        # Every non-center point takes the cluster label of its closest higher-density neighbor
+        for cluster_id, center_idx in enumerate(self.cluster_centers_indices_):
+            self.labels_[center_idx] = cluster_id
+
+        # Iterate in descending density order to ensure parent labels are assigned before children
+        ord_rho = np.argsort(-self.rho_)
+        for idx in ord_rho:
+            if self.labels_[idx] == -1:
+                nearest_higher = self.nearest_higher_indices_[idx]
+                if nearest_higher != -1:
+                    self.labels_[idx] = self.labels_[nearest_higher]
+
+        return self
+
+    def fit_predict(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> np.ndarray:
+        """Fit the model and return cluster labels."""
+        self.fit(X, y)
+        return self.labels_

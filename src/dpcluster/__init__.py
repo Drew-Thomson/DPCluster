@@ -1,3 +1,3 @@
-from .cluster import Densitycluster
+from .cluster import DensityPeakClustering
 
-__all__ = ["Densitycluster"]
+__all__ = ["DensityPeakClustering"]
