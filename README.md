@@ -12,7 +12,7 @@ Based on the algorithm described in:
 > Alex Rodriguez and Alessandro Laio. *Science*, 2014, 344(6191), 1492-1496. 
 > DOI: [10.1126/science.1242072](https://doi.org/10.1126/science.1242072)
 
-This is a modified version of code originally used to cluster transformed Ramachandran coordinates for cyclic peptides, but the algorithm will work for any data. It has been tested for dimensions up to 4D, but in principle should work for higher.
+This is a modified version of code originally used in my research group to cluster transformed Ramachandran coordinates for cyclic peptides, but the algorithm will work for any data. It has been tested for dimensions up to 4D, but in principle should work for higher.
 
 ---
 
