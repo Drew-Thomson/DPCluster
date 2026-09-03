@@ -12,6 +12,8 @@ Based on the algorithm described in:
 > Alex Rodriguez and Alessandro Laio. *Science*, 2014, 344(6191), 1492-1496. 
 > DOI: [10.1126/science.1242072](https://doi.org/10.1126/science.1242072)
 
+This is a modified version of code originally used to cluster transformed Ramachandran coordinates for cyclic peptides, but the algorithm will work for any data. It has been tested for dimensions up to 4D, but in principle should work for higher.
+
 ---
 
 ## 🧬 Overview
@@ -20,10 +22,10 @@ Density Peak Clustering intuitively defines cluster centers as points that are s
 Unlike traditional implementations restricted to 2D or 3D datasets, `dpcluster` is built to handle **N-dimensional** conformations (e.g., flattened distance matrices, PCA-reduced dihedral angles) out-of-the-box.
 
 ## ✨ Key Engineering Features
-- **Vectorized Performance:** Heavy calculations are vectorized via NumPy. The original $O(N^2)$ assignment bottleneck has been completely replaced with a lightning-fast $O(N)$ lookup step.
-- **Scikit-Learn API:** Inherits from `BaseEstimator` and `ClusterMixin`. This makes the model fully plug-and-play with the scikit-learn ecosystem (pipelines, cross-validation, grid search).
-- **Smart Defaults:** If left unspecified, the cutoff distance (`cutoff_dist`) is intelligently auto-estimated using the 2nd percentile of the pairwise distance matrix as recommended in the original publication.
-- **Decoupled Visualization:** The plotting module dynamically adapts to 2D or 3D data. Matplotlib is treated as an *optional* dependency, ensuring the core package remains lightweight and safe for headless HPC cluster execution.
+- **Vectorized Performance:** Heavy calculations are vectorized via NumPy. The original $O(N^2)$ assignment bottleneck has been completely replaced with a faster $O(N)$ lookup step.
+- **Scikit-Learn API:** Inherits from `BaseEstimator` and `ClusterMixin`. This makes the model fully plug-and-play with the scikit-learn ecosystem.
+- **Defaults:** If left unspecified, the cutoff distance (`cutoff_dist`) is dynamically auto-estimated using the 2nd percentile of the pairwise distance matrix as recommended in the original publication.
+- **Decoupled Visualization:** The plotting module dynamically adapts to 2D or 3D data. Matplotlib is an optional dependency, ensuring the core package is safe for headless HPC cluster execution.
 
 ---
 
@@ -34,7 +36,7 @@ To install the core package:
 pip install -e .
 ```
 
-To enable visualization tools, install the optional `matplotlib` dependency:
+To enable visualization tools, use the optional `matplotlib` dependency:
 ```bash
 pip install matplotlib
 ```
@@ -70,7 +72,7 @@ fig2, ax2 = plot_clusters(model, X)
 
 ## 🧪 Testing & Validation
 
-This project maintains strict test coverage ensuring algorithmic correctness and edge-case handling. The test suite uses synthetic datasets and scikit-learn's **Adjusted Rand Index (ARI)** to rigorously validate clustering accuracy against ground-truth labels.
+This project maintains strict test coverage for algorithmic correctness and edge-case handling. The test suite uses synthetic datasets and scikit-learn's **Adjusted Rand Index (ARI)** to validate clustering accuracy against ground-truth labels.
 
 To run the test suite:
 ```bash
