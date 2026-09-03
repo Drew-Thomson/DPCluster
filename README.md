@@ -4,6 +4,7 @@
 [![scikit-learn compatible](https://img.shields.io/badge/scikit--learn-compatible-F7931E.svg)](https://scikit-learn.org/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Testing: pytest](https://img.shields.io/badge/testing-pytest-green.svg)](https://docs.pytest.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A high-performance, vectorized implementation of **Density Peak Clustering** designed for structural biology, molecular dynamics (MD) trajectories, and general-purpose N-dimensional data analysis.
 
